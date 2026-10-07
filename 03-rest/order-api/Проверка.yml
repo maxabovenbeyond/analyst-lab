@@ -1,0 +1,26 @@
+info:
+  name: Проверка
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: https://api.open-meteo.com/v1/forecast?latitude=55.75&longitude=37.62&current_weather=true
+  params:
+    - name: latitude
+      value: "55.75"
+      type: query
+    - name: longitude
+      value: "37.62"
+      type: query
+    - name: current_weather
+      value: "true"
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: false
