@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: lab-postgres
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: lab
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    container_name: lab-adminer
+    ports:
+      - "8081:8080"
+
+volumes:
+  pgdata:
