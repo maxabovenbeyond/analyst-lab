@@ -1,0 +1,41 @@
+@startuml state-order
+title Жизненный цикл заказа
+
+state "Ожидает оплаты" as AWAITING_PAYMENT
+state "Оплачен" as PAID
+state "Собирается" as ASSEMBLING
+state "Ожидает курьера" as AWAITING_COURIER
+state "Передан курьеру" as IN_DELIVERY
+state "Доставлен" as DELIVERED
+state "Отменён" as CANCELLED
+
+[*] --> AWAITING_PAYMENT : клиент подтвердил заказ
+AWAITING_PAYMENT --> PAID : вебхук «оплата прошла» / отправить чек, OrderPaid
+AWAITING_PAYMENT --> AWAITING_PAYMENT : вебхук «оплата отклонена» / показать причину отказа
+AWAITING_PAYMENT --> CANCELLED : таймер 15 мин [оплата не получена]
+PAID --> ASSEMBLING : Сотрудник нажал принять заказ / OrderAccepted
+PAID --> CANCELLED : Таймер 10 мин [магазин не принял заказ] / автоотмена, OrderCancelled
+ASSEMBLING --> AWAITING_COURIER : Сотрудник нажал «Заказ собран» / Вызов курьера, OrderAssembled
+ASSEMBLING --> CANCELLED : Таймер 15 мин [магазин не собрал заказ] / автоотмена, OrderCancelled
+AWAITING_COURIER --> AWAITING_COURIER : Не нашолся курьер / Передача в резервную службу доставки, OrderAssembled
+AWAITING_COURIER --> CANCELLED : Не нашёлся курьер в течение 15 мин / автоотмена, OrderCancelled
+AWAITING_COURIER --> IN_DELIVERY : вебхук «курьер забрал заказ» / OrderPickedUp
+IN_DELIVERY --> DELIVERED : вебхук «курьер доставил заказ» / OrderDelivered
+IN_DELIVERY --> CANCELLED : вебхук «курьер не смог доставить заказ» / OrderCancelled
+DELIVERED --> [*]
+CANCELLED --> [*]
+
+' Допишите переходы:
+' - PAID → ASSEMBLING: что происходит? (US-10)
+' - PAID → CANCELLED: когда и что делает система? (US-10, автоотмена)
+' - ASSEMBLING → AWAITING_COURIER: (US-16)
+' - AWAITING_COURIER → IN_DELIVERY: кто сообщает? (US-16, вебхук)
+' - IN_DELIVERY → DELIVERED: кто сообщает?
+' - Конечные состояния: DELIVERED → [*], CANCELLED → [*]
+'
+' И решите сами (это аналитическое решение, правильного ответа нет):
+' - Может ли клиент сам отменить заказ? До какого статуса?
+' - Может ли оператор поддержки отменить заказ в статусе AWAITING_COURIER?
+'   Что тогда должна сделать система со службой доставки? (вспомните OrderCancelled на диаграмме контейнеров)
+
+@enduml
