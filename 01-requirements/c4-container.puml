@@ -1,0 +1,61 @@
+@startuml c4-container
+!include <C4/C4_Container>
+
+title Сервис доставки из локальных магазинов — контейнеры
+
+Person(client, "Клиент")
+Person(staff, "Сотрудник магазина")
+Person(support, "Оператор поддержки")
+
+System_Boundary(service, "Сервис доставки") {
+  Container(web_client, "Веб-приложение клиента", "React", "Каталог, корзина, оформление заказа, статусы")
+  Container(web_shop, "Кабинет магазина", "React", "Приём заказов, загрузка каталога, метрики")
+  Container(web_support, "Кабинет поддержки", "React", "История заказа, претензии, возвраты")
+  Container(api, "Order API", "Python, FastAPI", "Бизнес-логика заказов, каталог, оплата")
+  Container(delivery_adapter, "Сервис интеграции с доставкой", "Python", "Создание заявок, повторы, переключение на резерв")
+  Container(notifier, "Сервис уведомлений", "Python", "SMS и уведомления клиентам и магазинам")
+  ContainerDb(db, "База данных", "PostgreSQL", "Заказы, товары, клиенты, магазины")
+  ContainerQueue(bus, "Шина событий", "Kafka", "События заказа: OrderPaid, OrderAssembled, ...")
+}
+
+System_Ext(payment, "Платёжный провайдер")
+System_Ext(delivery, "Служба доставки (основная)")
+System_Ext(delivery_backup, "Служба доставки (резервная)")
+System_Ext(sms, "SMS-шлюз")
+
+Rel(client, web_client, "Использует", "Веб-браузер, HTTPS")
+Rel(staff, web_shop, "Использует", "Веб-браузер, HTTPS")
+Rel(support, web_support, "Использует", "Веб-браузер, HTTPS")
+
+Rel(web_client, api, "Каталог, корзина, оформление заказа, статусы", "REST/JSON")
+Rel(web_shop, api, "Приём заказа, отметка сборки, загрузка каталога", "REST/JSON")
+Rel(web_support, api, "История заказа, претензии, возвраты", "REST/JSON")
+
+Rel(api, db, "Читает и записывает заказы, товары, клиентов", "SQL")
+Rel(api, payment, "Создаёт платёж, запрашивает возврат", "REST/JSON")
+Rel(payment, api, "Сообщает о результате оплаты и возврата", "Webhook, HTTPS")
+
+Rel(api, bus, "Публикует OrderPaid, OrderAccepted, OrderAssembled, OrderCancelled", "Kafka")
+Rel(api, bus, "Читает события доставки, обновляет статус заказа", "Kafka")
+
+Rel(delivery_adapter, bus, "Читает OrderAssembled, OrderCancelled; публикует CourierAssigned, OrderPickedUp, OrderDelivered", "Kafka")
+Rel(delivery_adapter, delivery, "Создаёт и отменяет заявки на доставку", "REST/JSON")
+Rel(delivery, delivery_adapter, "Сообщает статусы доставки", "Webhook, HTTPS")
+Rel(delivery_adapter, delivery_backup, "Создаёт заявки при отказе основной службы", "REST/JSON")
+Rel(delivery_backup, delivery_adapter, "Сообщает статусы доставки", "Webhook, HTTPS")
+
+Rel(notifier, bus, "Читает OrderAccepted, OrderCancelled, OrderPickedUp, OrderDelivered", "Kafka")
+Rel(notifier, sms, "Отправляет SMS", "REST/JSON")
+
+
+' Допишите связи:
+' - сотрудник магазина → кабинет магазина; оператор поддержки → кабинет поддержки
+' - кабинет магазина и кабинет поддержки → Order API
+' - Order API → база данных
+' - Order API ↔ платёжный провайдер (в обе стороны: создание платежа и уведомление об оплате)
+' - сервис интеграции с доставкой читает события из шины → какое событие его интересует?
+' - сервис интеграции с доставкой → основная и резервная службы доставки
+' - сервис уведомлений читает события из шины → SMS-шлюз
+
+SHOW_LEGEND()
+@enduml

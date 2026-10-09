@@ -1,0 +1,19 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor User
+package "Analyst Lab" {
+  component "Requirements" as Requirements
+  component "Data Sources" as DataSources
+  component "Analyses" as Analyses
+  component "Reports" as Reports
+}
+
+User --> Requirements : defines
+Requirements --> DataSources : gathers
+DataSources --> Analyses : feeds
+Analyses --> Reports : produces
+Reports --> User : presents
+
+@enduml
