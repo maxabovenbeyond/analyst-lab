@@ -1,0 +1,71 @@
+@startuml seq-create-order
+title Оформление заказа: от оплаты до вызова курьера
+autonumber
+
+actor "Клиент" as C
+participant "Веб-приложение\nклиента" as WEB
+participant "Order API" as API
+database "БД" as DB
+participant "Платёжный\nпровайдер" as PAY
+queue "Kafka" as BUS
+participant "Кабинет\nмагазина" as SHOP
+actor "Сотрудник\nмагазина" as STAFF
+participant "Сервис интеграции\nс доставкой" as DA
+participant "Служба\nдоставки" as DEL
+
+== Оплата ==
+C -> WEB: Нажимает «Оплатить 1 999 ₽»
+WEB -> API: POST /orders
+API -> DB: Создаёт заказ (статус «Ожидает оплаты»)
+API -> PAY: POST /payments (сумма, номер заказа)
+PAY --> API: 201 (paymentId, ссылка на оплату)
+API --> WEB: 201 (номер заказа, ссылка на оплату)
+WEB --> C: Перенаправляет на страницу оплаты
+C -> PAY: Подтверждает оплату
+
+alt Оплата прошла
+  PAY -> API: Webhook: платёж успешен
+  note right of API: Повторное уведомление\nне меняет статус и не создаёт дубль
+  API -> DB: Статус «Оплачен»
+  API ->> BUS: OrderPaid
+  API --> PAY: 200 OK
+  PAY --> C: Перенаправляет обратно на сайт
+  WEB -> API: GET /orders/{id}
+  API --> WEB: Статус «Оплачен»
+  WEB --> C: «Заказ оплачен, ждём подтверждения магазина»
+else Банк отклонил платёж
+  PAY -> API: Webhook: платёж отклонён (недостаточно средств)
+  API -> DB: Статус остаётся «Ожидает оплаты», причина отказа сохранена
+  API --> PAY: 200 OK
+  PAY --> C: Перенаправляет обратно на сайт
+  WEB -> API: GET /orders/{id}
+  API --> WEB: Статус «Ожидает оплаты», причина отказа
+  WEB --> C: «Оплата не прошла. Попробуйте другую карту или СБП»
+end
+
+== Приём заказа магазином ==
+loop Каждые 15 секунд
+  SHOP -> API: GET /orders?status=PAID
+  API -> DB: Читает оплаченные заказы магазина
+  API --> SHOP: Список новых заказов
+end
+SHOP --> STAFF: Звуковой сигнал «Новый заказ»
+STAFF -> SHOP: Нажимает «Принять заказ»
+SHOP -> API: POST /orders/{id}/accept
+API -> DB: Статус «Собирается»
+API ->> BUS: OrderAccepted
+API --> SHOP: 200 OK
+
+== Сборка и вызов курьера ==
+STAFF -> SHOP: Нажимает «Заказ собран»
+SHOP -> API: POST /orders/{id}/assemble
+API -> DB: Статус «Ожидает курьера»
+API ->> BUS: OrderAssembled
+API --> SHOP: 200 OK
+BUS ->> DA: OrderAssembled
+DA -> DEL: POST /deliveries (номер заказа, адреса, вес)
+DEL --> DA: 201 (deliveryId)
+DA ->> BUS: DeliveryRequested
+note right of DA: Курьер ещё не назначен.\nО назначении служба сообщит\nвебхуком позже
+
+@enduml
