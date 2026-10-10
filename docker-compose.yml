@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:17
     container_name: lab-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: lab
       POSTGRES_PASSWORD: lab
@@ -14,6 +15,7 @@ services:
   adminer:
     image: adminer
     container_name: lab-adminer
+    restart: unless-stopped
     ports:
       - "8081:8080"
 
