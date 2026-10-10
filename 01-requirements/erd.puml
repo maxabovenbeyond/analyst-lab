@@ -1,0 +1,130 @@
+@startuml erd
+title Логическая модель данных
+hide circle
+skinparam linetype ortho
+
+entity "customer\nКлиент" as customer {
+  * id : bigint <<PK>>
+  --
+  * phone : varchar(20) <<unique>>
+  name : varchar(100)
+  * pd_consent_at : timestamp
+  * created_at : timestamp
+}
+
+entity "shop\nМагазин" as shop {
+  * id : bigint <<PK>>
+  --
+  * name : varchar(200)
+  * address : varchar(300)
+  * commission_percent : numeric(4,2)
+  * is_active : boolean
+}
+
+entity "shop_user\nСотрудник магазина" as shop_user {
+  * id : bigint <<PK>>
+  --
+  * shop_id : bigint <<FK>>
+  * phone : varchar(20)
+  * role : varchar(20)  -- OWNER / STAFF
+}
+
+entity "product\nТовар" as product {
+  * id : bigint <<PK>>
+  --
+  * shop_id : bigint <<FK>>
+  * name : varchar(200)
+  * price : numeric(10,2)
+  * unit : varchar(20)
+  * in_stock : boolean
+}
+
+entity "orders\nЗаказ" as orders {
+  * id : bigint <<PK>>
+  --
+  * customer_id : bigint <<FK>>
+  * shop_id : bigint <<FK>>
+  * status : varchar(30)
+  * items_amount : numeric(10,2)
+  * delivery_fee : numeric(10,2)
+  * delivery_address : varchar(300)
+  cancel_reason : varchar(100)
+  * created_at : timestamp
+}
+
+entity "order_item\nПозиция заказа" as order_item {
+  * id : bigint <<PK>>
+  --
+  * order_id : bigint <<FK>>
+  * product_id : bigint <<FK>>
+  * quantity : numeric(10,3)
+  * price : numeric(10,2)  -- цена на момент заказа
+}
+
+entity "payment\nПлатёж" as payment {
+  * id : bigint <<PK>>
+  --
+  * order_id : bigint <<FK>>
+  * type : varchar(10)  -- PAYMENT / REFUND
+  * status : varchar(20)  -- PENDING / SUCCEEDED / DECLINED
+  * amount : numeric(10,2)
+  * provider_payment_id : varchar(100) <<unique>>
+  decline_reason : varchar(200)
+  * created_at : timestamp
+}
+
+entity "delivery\nДоставка" as delivery {
+  * id : bigint <<PK>>
+  --
+  * order_id : bigint <<FK>>
+  * provider : varchar(10)  -- MAIN / BACKUP
+  * provider_delivery_id : varchar(100)
+  * status : varchar(20)  -- REQUESTED / ASSIGNED / PICKED_UP / DELIVERED / FAILED / CANCELLED
+  courier_name : varchar(100)
+  * created_at : timestamp
+}
+
+entity "support_user\nОператор поддержки" as support_user {
+  * id : bigint <<PK>>
+  --
+  * name : varchar(100)
+  * email : varchar(100) <<unique>>
+}
+
+entity "claim\nПретензия" as claim {
+  * id : bigint <<PK>>
+  --
+  * order_id : bigint <<FK>>
+  order_item_id : bigint <<FK>>  -- null, если претензия на весь заказ
+  support_user_id : bigint <<FK>>  -- null, пока не назначен оператор
+  * status : varchar(20)  -- OPEN / APPROVED / REJECTED
+  * reason : varchar(500)
+  photo_urls : text[]
+  refund_amount : numeric(10,2)
+  * created_at : timestamp
+  resolved_at : timestamp
+}
+
+entity "order_status_history\nИстория статусов" as order_status_history {
+  * id : bigint <<PK>>
+  --
+  * order_id : bigint <<FK>>
+  * status : varchar(30)
+  * changed_at : timestamp
+  * changed_by : varchar(20)  -- CUSTOMER / SHOP / SUPPORT / SYSTEM / PAYMENT_PROVIDER / DELIVERY_PROVIDER
+}
+
+customer ||--o{ orders : оформляет
+shop ||--o{ orders : получает
+shop ||--o{ product : продаёт
+shop ||--|{ shop_user : работает
+orders ||--|{ order_item : содержит
+product ||--o{ order_item : входит в
+orders ||--o{ payment : оплачивается
+orders ||--o{ delivery : доставляется
+orders ||--o{ claim : оспаривается
+order_item |o--o{ claim : по позиции
+support_user |o--o{ claim : разбирает
+orders ||--|{ order_status_history : история
+
+@enduml
