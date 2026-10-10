@@ -70,6 +70,7 @@ entity "payment\nПлатёж" as payment {
   * amount : numeric(10,2)
   * provider_payment_id : varchar(100) <<unique>>
   decline_reason : varchar(200)
+  * fee : numeric(10,2)
   * created_at : timestamp
 }
 
@@ -81,6 +82,7 @@ entity "delivery\nДоставка" as delivery {
   * provider_delivery_id : varchar(100)
   * status : varchar(20)  -- REQUESTED / ASSIGNED / PICKED_UP / DELIVERED / FAILED / CANCELLED
   courier_name : varchar(100)
+  * cost : numeric(10,2)
   * created_at : timestamp
 }
 
