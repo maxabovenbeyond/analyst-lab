@@ -138,3 +138,16 @@ CREATE TABLE order_status_history (
         CHECK (changed_by IN ('CUSTOMER', 'SHOP', 'SUPPORT', 'SYSTEM',
                               'PAYMENT_PROVIDER', 'DELIVERY_PROVIDER'))
 );
+
+-- ===== Индексы =====
+-- PostgreSQL не создаёт индексы для внешних ключей автоматически
+CREATE INDEX idx_orders_customer        ON orders (customer_id);
+CREATE INDEX idx_orders_shop_created    ON orders (shop_id, created_at);   -- заказы магазина за период (кабинет, метрики)
+CREATE INDEX idx_orders_status_created  ON orders (status, created_at);    -- кабинет магазина: новые оплаченные заказы
+CREATE INDEX idx_product_shop           ON product (shop_id);
+CREATE INDEX idx_order_item_product     ON order_item (product_id);
+-- order_item (order_id) не нужен: его покрывает UNIQUE (order_id, product_id) — order_id стоит первым
+CREATE INDEX idx_payment_order          ON payment (order_id);
+CREATE INDEX idx_delivery_order         ON delivery (order_id);
+CREATE INDEX idx_claim_order            ON claim (order_id);
+CREATE INDEX idx_history_order_changed  ON order_status_history (order_id, changed_at);  -- история заказа для поддержки
