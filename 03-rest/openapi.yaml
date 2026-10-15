@@ -1,0 +1,418 @@
+openapi: 3.1.0
+info:
+  title: Сервис доставки из магазинов — API заказов
+  version: 1.0.0
+  description: |
+    API для клиентского приложения, кабинета магазина, поддержки
+    и внешних провайдеров (оплата, доставка).
+    Ошибки возвращаются в формате RFC 9457 (application/problem+json).
+
+servers:
+  - url: http://localhost:8000/v1
+    description: Локальный стенд
+
+tags:
+  - name: Заказы
+  - name: Магазин
+  - name: Вебхуки
+
+# По умолчанию все эндпоинты требуют Bearer-токен
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ---------- 1. СОЗДАНИЕ: POST → 201 ----------
+  /orders:
+    post:
+      tags: [Заказы]
+      summary: Создать заказ
+      description: Создаёт заказ из корзины. Повтор с тем же Idempotency-Key вернёт тот же заказ.
+      operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              shop_id: 12
+              items:
+                - product_id: 345
+                  quantity: 2
+                - product_id: 346
+                  quantity: 1
+      responses:
+        '201':
+          description: Заказ создан, ожидает оплаты
+          headers:
+            Location:
+              description: Адрес созданного заказа
+              schema:
+                type: string
+                example: /v1/orders/8001
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+
+  # ---------- 2. ЧТЕНИЕ: GET → 200 ----------
+  /orders/{orderId}:
+    get:
+      tags: [Заказы]
+      summary: Карточка заказа
+      operationId: getOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Заказ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------- 3. КОМАНДА: POST /действие → 200 / 409 ----------
+  /orders/{orderId}/cancel:
+    post:
+      tags: [Заказы]
+      summary: Отменить заказ
+      description: |
+        Клиент — из AWAITING_PAYMENT и PAID.
+        Поддержка — из любого статуса до IN_DELIVERY.
+      operationId: cancelOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+            example:
+              reason: Клиент отменил
+      responses:
+        '200':
+          description: Заказ отменён (в том числе при повторном вызове)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+
+  # ---------- 4. СПИСОК С ФИЛЬТРАМИ: GET ?query → 200 ----------
+  /shops/{shopId}/orders:
+    get:
+      tags: [Магазин]
+      summary: Заказы магазина
+      description: Кабинет магазина опрашивает раз в 15 секунд. Фильтры соответствуют индексу orders (shop_id, status, created_at).
+      operationId: listShopOrders
+      parameters:
+        - $ref: '#/components/parameters/ShopId'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: created_from
+          in: query
+          required: false
+          description: Заказы, созданные начиная с этого момента
+          schema:
+            type: string
+            format: date-time
+          example: '2026-10-14T09:00:00+03:00'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Значение next_cursor из предыдущего ответа
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Страница заказов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------- 5. ВЕБХУК: вызывает внешняя система ----------
+  /webhooks/payments:
+    post:
+      tags: [Вебхуки]
+      summary: Событие платёжного провайдера
+      description: |
+        Провайдер повторяет доставку, пока не получит 2xx (at-least-once).
+        Повтор события распознаётся по event_id и подтверждается ответом 200 без изменений.
+      operationId: paymentWebhook
+      security: []          # Bearer не нужен — проверяем подпись
+      parameters:
+        - name: X-Signature
+          in: header
+          required: true
+          description: HMAC-SHA256 тела запроса на общем секрете
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentEvent'
+            example:
+              event_id: evt_9f2c1a
+              type: payment.succeeded
+              provider_payment_id: PAY-000123
+              order_id: 8001
+              amount: 2547.00
+              occurred_at: '2026-10-14T12:05:11+03:00'
+      responses:
+        '200':
+          description: Событие принято (или уже было принято ранее)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 8001
+    ShopId:
+      name: shopId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 12
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Уникальный ключ операции (UUID). Повтор с тем же ключом не создаёт дубль.
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+
+    OrderStatus:
+      type: string
+      enum: [AWAITING_PAYMENT, PAID, ASSEMBLING, AWAITING_COURIER, IN_DELIVERY, DELIVERED, CANCELLED]
+
+    CreateOrderRequest:
+      type: object
+      required: [shop_id, items]
+      properties:
+        shop_id:
+          type: integer
+          format: int64
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id:
+                type: integer
+                format: int64
+              quantity:
+                type: integer
+                minimum: 1
+
+    OrderItem:
+      type: object
+      properties:
+        product_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        price:
+          type: number
+          description: Цена на момент заказа, ₽
+        quantity:
+          type: integer
+
+    Order:
+      type: object
+      required: [id, shop_id, status, items_amount, delivery_fee, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 8001
+        shop_id:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        items_amount:
+          type: number
+          example: 2398.00
+        delivery_fee:
+          type: number
+          description: 149 ₽ при сумме товаров до 2000 ₽, иначе 0
+          example: 149.00
+        cancel_reason:
+          type: [string, 'null']
+          description: Заполнена только для CANCELLED
+        created_at:
+          type: string
+          format: date-time
+
+    OrderList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        next_cursor:
+          type: [string, 'null']
+          description: null — это последняя страница
+
+    CancelRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 200
+
+    PaymentEvent:
+      type: object
+      required: [event_id, type, provider_payment_id, order_id, amount, occurred_at]
+      properties:
+        event_id:
+          type: string
+        type:
+          type: string
+          enum: [payment.succeeded, payment.declined, refund.succeeded]
+        provider_payment_id:
+          type: string
+        order_id:
+          type: integer
+          format: int64
+        amount:
+          type: number
+        occurred_at:
+          type: string
+          format: date-time
+
+    Problem:
+      type: object
+      description: Ошибка по RFC 9457
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Запрос технически некорректен (битый JSON, неверные типы)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Нет или неверный токен / подпись
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Недостаточно прав
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Объект не найден (или чужой — скрываем факт существования)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Действие невозможно в текущем состоянии объекта
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://api.example.ru/errors/invalid-transition
+            title: Недопустимый переход статуса
+            status: 409
+            detail: Заказ 8001 в статусе IN_DELIVERY нельзя отменить
+            instance: /v1/orders/8001/cancel
+    UnprocessableContent:
+      description: Данные нарушают бизнес-правила
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://api.example.ru/errors/validation
+            title: Ошибка валидации
+            status: 422
+            detail: Товар 345 отсутствует в наличии
