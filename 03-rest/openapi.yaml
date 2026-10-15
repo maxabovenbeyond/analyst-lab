@@ -14,6 +14,7 @@ servers:
 tags:
   - name: Заказы
   - name: Магазин
+  - name: Претензии
   - name: Вебхуки
 
 # По умолчанию все эндпоинты требуют Bearer-токен
@@ -121,7 +122,98 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableContent'
 
-  # ---------- 4. СПИСОК С ФИЛЬТРАМИ: GET ?query → 200 ----------
+  # ---------- КОМАНДА МАГАЗИНА: без тела запроса ----------
+  /orders/{orderId}/accept:
+    post:
+      tags: [Магазин]
+      summary: Принять заказ
+      description: |
+        Сотрудник магазина принимает оплаченный заказ в работу.
+        Переход PAID → ASSEMBLING.
+      operationId: acceptOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Заказ принят, статус ASSEMBLING (в том числе при повторном вызове)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /orders/{orderId}/assembled:
+    post:
+      tags: [Магазин]
+      summary: Отметить заказ собранным
+      description: |
+        Переход ASSEMBLING → AWAITING_COURIER.
+        Побочный эффект: автоматически вызывается курьер (событие DeliveryRequested), US-16.
+      operationId: markOrderAssembled
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Заказ собран, курьер вызван
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------- КОМАНДА НАД ПРЕТЕНЗИЕЙ: с необязательным телом ----------
+  /claims/{claimId}/approve:
+    post:
+      tags: [Претензии]
+      summary: Одобрить претензию и инициировать возврат
+      description: |
+        Только поддержка. Переход OPEN → APPROVED.
+        Если refund_amount не передан, возвращается полная стоимость позиции.
+        Возврат выполняет платёжный провайдер асинхронно: в ответе refund.status = PENDING.
+        Защита от двойного одобрения: условный UPDATE ... WHERE status = 'OPEN'.
+      operationId: approveClaim
+      parameters:
+        - $ref: '#/components/parameters/ClaimId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveClaimRequest'
+            example:
+              refund_amount: 450.00
+              comment: Повреждена упаковка, возврат за 1 шт.
+      responses:
+        '200':
+          description: Претензия одобрена, возврат создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claim'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+
+  # ---------- 6. СПИСОК С ФИЛЬТРАМИ: GET ?query → 200 ----------
   /shops/{shopId}/orders:
     get:
       tags: [Магазин]
@@ -238,6 +330,14 @@ components:
       schema:
         type: string
         format: uuid
+    ClaimId:
+      name: claimId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 103
 
   schemas:
 
@@ -331,6 +431,57 @@ components:
           type: string
           minLength: 3
           maxLength: 200
+  
+    ApproveClaimRequest:
+      type: object
+      properties:
+        refund_amount:
+          type: number
+          exclusiveMinimum: 0
+          description: Сумма возврата. Не больше стоимости позиции. Если не указана — полная стоимость.
+        comment:
+          type: string
+          maxLength: 500
+
+    Refund:
+      type: object
+      required: [amount, status]
+      properties:
+        amount:
+          type: number
+          example: 450.00
+        status:
+          type: string
+          enum: [PENDING, SUCCEEDED]
+
+    Claim:
+      type: object
+      required: [id, order_id, status, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 103
+        order_id:
+          type: integer
+          format: int64
+          example: 8001
+        status:
+          type: string
+          enum: [OPEN, APPROVED, REJECTED]
+        refund_amount:
+          type: [number, 'null']
+          description: Заполнена только для APPROVED
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: [string, 'null']
+          format: date-time
+          description: Заполнена, когда статус не OPEN (как chk_resolved_at в БД)
+        refund:
+          $ref: '#/components/schemas/Refund'
+          description: Есть только у одобренной претензии
 
     PaymentEvent:
       type: object
