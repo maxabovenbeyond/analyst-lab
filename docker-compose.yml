@@ -30,5 +30,18 @@ services:
     volumes:
       - ./03-rest:/spec
 
+  api:
+    build: ./03-rest/service
+    container_name: lab-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://lab:lab@postgres:5432/lab
+    volumes:
+      - ./03-rest/service:/app
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
