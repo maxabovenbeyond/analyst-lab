@@ -4,6 +4,13 @@
   GET  /v1/shops/{shop_id}/orders    — заказы магазина (cursor-пагинация)
   POST /v1/orders/{order_id}/cancel  — отмена заказа
 """
+import hashlib
+import hmac
+from decimal import Decimal
+
+from psycopg.types.json import Jsonb
+from pydantic import ValidationError
+
 import base64
 import json
 import os
@@ -293,6 +300,121 @@ def cancel_order(order_id: int, body: CancelRequest,       # нет reason → 4
         order = load_order(conn, order_id)
         return order_out(order, load_items(conn, order_id))  # → 200, COMMIT
 
+# =====================================================================
+# 5. ВЕБХУК ПЛАТЁЖНОГО ПРОВАЙДЕРА (operationId: paymentWebhook)
+# =====================================================================
+
+# Общий секрет с провайдером. Берётся из настроек контейнера, в коде не хранится.
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "lab-secret")
+
+# Комиссия провайдера, как в seed.sql
+PROVIDER_FEE_RATE = Decimal("0.025")
+
+
+class PaymentEvent(BaseModel):
+    """Схема PaymentEvent из контракта."""
+    event_id: str = Field(min_length=1)
+    type: Literal["payment.succeeded", "payment.declined", "refund.succeeded"]
+    provider_payment_id: str = Field(min_length=1)
+    order_id: int
+    amount: Decimal = Field(gt=0)
+    occurred_at: datetime
+
+
+def verify_signature(raw_body: bytes, signature: Optional[str]) -> None:
+    """Сургучная печать: HMAC-SHA256 от тела запроса на общем секрете."""
+    expected = hmac.new(WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    # compare_digest сравнивает за одинаковое время — защита от подбора подписи по времени ответа
+    if not signature or not hmac.compare_digest(expected, signature):
+        raise ApiError(401, "Неверная подпись", "Подпись X-Signature не совпала с телом запроса")
+
+
+def money(value) -> Decimal:
+    return Decimal(value).quantize(Decimal("0.01"))
+
+
+def process_payment_event(conn, e: PaymentEvent) -> str:
+    """Бизнес-логика: что сделать с событием. Возвращает итог для журнала."""
+    order = load_order(conn, e.order_id, for_update=True)
+    if order is None:
+        raise ApiError(404, "Заказ не найден", f"Заказ {e.order_id} не найден")
+
+    if e.type == "refund.succeeded":
+        return "IGNORED_REFUNDS_NOT_IMPLEMENTED"       # возвраты сделаем позже
+
+    status = "SUCCEEDED" if e.type == "payment.succeeded" else "DECLINED"
+
+    if status == "SUCCEEDED":
+        expected = money(order["items_amount"] + order["delivery_fee"])
+        if money(e.amount) != expected:
+            raise ApiError(422, "Сумма не совпадает",
+                           f"Заказ {e.order_id}: ожидалось {expected}, пришло {money(e.amount)}")
+
+    fee = money(e.amount * PROVIDER_FEE_RATE) if status == "SUCCEEDED" else Decimal("0")
+
+    # Второй рубеж: UNIQUE(provider_payment_id). Тот же платёж в новом событии не запишется дважды.
+    inserted = conn.execute(
+        """
+        INSERT INTO delivery.payment
+            (order_id, type, status, amount, fee, provider_payment_id, created_at)
+        VALUES (%s, 'PAYMENT', %s, %s, %s, %s, %s)
+        ON CONFLICT (provider_payment_id) DO NOTHING
+        RETURNING id
+        """,
+        (e.order_id, status, money(e.amount), fee, e.provider_payment_id, e.occurred_at),
+    ).fetchone()
+
+    if inserted is None:
+        return "PAYMENT_ALREADY_RECORDED"
+    if status == "DECLINED":
+        return "DECLINED_RECORDED"                     # заказ остаётся AWAITING_PAYMENT
+
+    if order["status"] == "AWAITING_PAYMENT":
+        conn.execute("UPDATE delivery.orders SET status = 'PAID' WHERE id = %s", (e.order_id,))
+        conn.execute(
+            """INSERT INTO delivery.order_status_history (order_id, status, changed_at, changed_by)
+               VALUES (%s, 'PAID', now(), 'PAYMENT_PROVIDER')""",
+            (e.order_id,),
+        )
+        return "ORDER_PAID"
+
+    if order["status"] == "CANCELLED":
+        # Деньги пришли после отмены: платёж записали, статус не трогаем, нужен возврат
+        return "PAID_AFTER_CANCEL_REFUND_NEEDED"
+
+    return f"PAYMENT_RECORDED_ORDER_IS_{order['status']}"
+
+
+@router.post("/webhooks/payments")
+async def payment_webhook(request: Request, x_signature: Optional[str] = Header(None)):
+    raw_body = await request.body()        # подпись считается от сырых байтов, а не от разобранного JSON
+
+    verify_signature(raw_body, x_signature)                                  # 1. печать → 401
+
+    try:
+        event = PaymentEvent.model_validate_json(raw_body)                    # 2. формат → 400
+    except ValidationError as exc:
+        raise ApiError(400, "Некорректное событие",
+                       "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()))
+
+    with db() as conn:                                                        # шаги 3–7: одна транзакция
+        # 3. Журнал входящих: первый раз видим это событие?
+        first_time = conn.execute(
+            """
+            INSERT INTO delivery.webhook_event (event_id, provider, event_type, payload, result)
+            VALUES (%s, 'PAYMENT', %s, %s, 'PROCESSING')
+            ON CONFLICT (event_id) DO NOTHING
+            RETURNING event_id
+            """,
+            (event.event_id, event.type, Jsonb(json.loads(raw_body))),
+        ).fetchone()
+        if first_time is None:
+            return {"result": "DUPLICATE"}                                   # копия → 200
+
+        result = process_payment_event(conn, event)                           # 4–7
+        conn.execute("UPDATE delivery.webhook_event SET result = %s WHERE event_id = %s",
+                     (result, event.event_id))
+        return {"result": result}                                            # → 200, COMMIT
 
 # ---------- служебный эндпоинт: жив ли сервис и видит ли он базу ----------
 @app.get("/health")

@@ -1,0 +1,65 @@
+@startuml seq-payment-webhook
+title Вебхук платёжного провайдера: POST /v1/webhooks/payments
+autonumber
+
+participant "Платёжный\nпровайдер" as PAY
+participant "Order API" as API
+database "БД delivery" as DB
+
+loop пока не получен ответ 2xx (повтор через 1, 2, 4 с...)
+  PAY -> API: POST /v1/webhooks/payments\nX-Signature: HMAC(тело)\n{event_id, type, order_id, amount}
+  activate API
+
+  API -> API: Проверить подпись HMAC
+  alt подпись неверна
+    API --> PAY: 401 Неверная подпись
+
+  else подпись верна
+    API -> API: Проверить формат (схема PaymentEvent)
+    alt формат неверен
+      API --> PAY: 400 Некорректное событие
+
+    else формат верен
+      group Транзакция БД
+        API -> DB: INSERT webhook_event\nON CONFLICT (event_id) DO NOTHING
+        alt событие уже обработано
+          DB --> API: 0 строк
+          API --> PAY: 200 DUPLICATE
+
+        else новое событие
+          API -> DB: SELECT заказ FOR UPDATE
+          alt заказ не найден
+            API -> DB: ROLLBACK
+            API --> PAY: 404 Заказ не найден
+
+          else сумма не совпала с заказом
+            API -> DB: ROLLBACK
+            API --> PAY: 422 Сумма не совпадает
+
+          else заказ AWAITING_PAYMENT, сумма верна
+            API -> DB: INSERT payment (SUCCEEDED)
+            API -> DB: UPDATE orders → PAID\nINSERT order_status_history
+            API -> DB: UPDATE webhook_event result = ORDER_PAID
+            API -> DB: COMMIT
+            API --> PAY: 200 ORDER_PAID
+
+          else заказ CANCELLED (оплата после отмены)
+            API -> DB: INSERT payment (SUCCEEDED)
+            API -> DB: UPDATE webhook_event\nresult = PAID_AFTER_CANCEL_REFUND_NEEDED
+            API -> DB: COMMIT
+            API --> PAY: 200 (требуется возврат)
+          end
+        end
+      end
+    end
+  end
+  deactivate API
+end
+
+note right of DB
+  Ответы 401 и 400 — до обращения к БД.
+  Ответы 404 и 422 откатывают транзакцию:
+  в журнале и платежах следов не остаётся,
+  провайдер повторит событие.
+end note
+@enduml

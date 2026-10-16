@@ -139,6 +139,7 @@ CREATE TABLE order_status_history (
                               'PAYMENT_PROVIDER', 'DELIVERY_PROVIDER'))
 );
 
+
 -- ===== Индексы =====
 -- PostgreSQL не создаёт индексы для внешних ключей автоматически
 CREATE INDEX idx_orders_customer        ON orders (customer_id);
@@ -151,3 +152,13 @@ CREATE INDEX idx_payment_order          ON payment (order_id);
 CREATE INDEX idx_delivery_order         ON delivery (order_id);
 CREATE INDEX idx_claim_order            ON claim (order_id);
 CREATE INDEX idx_history_order_changed  ON order_status_history (order_id, changed_at);  -- история заказа для поддержки
+
+-- Журнал входящих вебхуков: защита от повторной обработки (at-least-once)
+CREATE TABLE delivery.webhook_event (
+    event_id     text        PRIMARY KEY,
+    provider     text        NOT NULL CHECK (provider IN ('PAYMENT', 'DELIVERY')),
+    event_type   text        NOT NULL,
+    payload      jsonb       NOT NULL,
+    result       text        NOT NULL,
+    received_at  timestamptz NOT NULL DEFAULT now()
+);
