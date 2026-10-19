@@ -1,0 +1,28 @@
+meta {
+  name: 02 Без причины → 422
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/v1/orders/{{orderId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: customer-{{customerId}}
+}
+
+body:json {
+  {}
+}
+
+tests {
+  test("код 422", function () {
+    expect(res.status).to.equal(422);
+  });
+  test("в описании ошибки упомянуто поле reason", function () {
+    expect(res.body.detail).to.include("reason");
+  });
+}

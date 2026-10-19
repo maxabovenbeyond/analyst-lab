@@ -1,0 +1,24 @@
+meta {
+  name: 04 Чужой клиент → 404 (скрываем существование)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/{{orderId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: customer-999999
+}
+
+tests {
+  test("код 404, а не 403", function () {
+    expect(res.status).to.equal(404);
+  });
+  test("Problem Details", function () {
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+  });
+}

@@ -1,0 +1,30 @@
+meta {
+  name: 03 Отмена доставленного → 409
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v1/orders/{{orderId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: support
+}
+
+body:json {
+  {
+    "reason": "Автотест"
+  }
+}
+
+tests {
+  test("код 409", function () {
+    expect(res.status).to.equal(409);
+  });
+  test("в описании указан текущий статус", function () {
+    expect(res.body.detail).to.include("DELIVERED");
+  });
+}

@@ -1,0 +1,22 @@
+meta {
+  name: 01 Без токена → 401
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/{{orderId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("код 401", function () {
+    expect(res.status).to.equal(401);
+  });
+  test("ошибка в формате Problem Details", function () {
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.body.status).to.equal(401);
+    expect(res.body.title).to.be.a("string");
+  });
+}

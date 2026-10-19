@@ -1,0 +1,21 @@
+meta {
+  name: 06 id не число → 400
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/abc
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: support
+}
+
+tests {
+  test("код 400", function () {
+    expect(res.status).to.equal(400);
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: 03 Чужой магазин → 403
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-999
+}
+
+tests {
+  test("код 403 (магазин не секрет, поэтому не 404)", function () {
+    expect(res.status).to.equal(403);
+  });
+}

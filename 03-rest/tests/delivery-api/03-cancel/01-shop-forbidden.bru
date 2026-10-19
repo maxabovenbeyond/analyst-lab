@@ -1,0 +1,27 @@
+meta {
+  name: 01 Магазин не может cancel → 403
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/v1/orders/{{orderId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+body:json {
+  {
+    "reason": "Нет товара"
+  }
+}
+
+tests {
+  test("код 403", function () {
+    expect(res.status).to.equal(403);
+  });
+}

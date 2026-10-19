@@ -1,0 +1,39 @@
+meta {
+  name: 02 Поддержка видит любой заказ → 200
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/{{orderId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: support
+}
+
+tests {
+  test("код 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("вернулся именно запрошенный заказ", function () {
+    expect(res.body.id).to.equal(Number(bru.getEnvVar("orderId")));
+  });
+  test("все обязательные поля схемы Order на месте", function () {
+    ["id", "shop_id", "status", "items_amount", "delivery_fee", "created_at"].forEach(function (f) {
+      expect(res.body).to.have.property(f);
+    });
+  });
+  test("статус из списка OrderStatus", function () {
+    expect(["AWAITING_PAYMENT", "PAID", "ASSEMBLING", "AWAITING_COURIER",
+            "IN_DELIVERY", "DELIVERED", "CANCELLED"]).to.include(res.body.status);
+  });
+  test("в карточке есть позиции", function () {
+    expect(res.body.items).to.be.an("array").that.is.not.empty;
+  });
+  test("customer_id наружу не отдаётся (его нет в контракте)", function () {
+    expect(res.body).to.not.have.property("customer_id");
+  });
+}

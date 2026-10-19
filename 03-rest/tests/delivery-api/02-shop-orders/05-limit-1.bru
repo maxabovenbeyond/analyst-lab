@@ -1,0 +1,24 @@
+meta {
+  name: 05 Граница limit=1 → 200, один заказ
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?limit=1
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("ровно один заказ", function () {
+    expect(res.body.items).to.have.lengthOf(1);
+  });
+}

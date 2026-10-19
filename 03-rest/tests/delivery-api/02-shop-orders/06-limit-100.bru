@@ -1,0 +1,24 @@
+meta {
+  name: 06 Граница limit=100 → 200
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?limit=100
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("не больше 100 заказов", function () {
+    expect(res.body.items.length).to.be.at.most(100);
+  });
+}

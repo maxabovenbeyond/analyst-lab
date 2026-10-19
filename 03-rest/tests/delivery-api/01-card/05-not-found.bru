@@ -1,0 +1,21 @@
+meta {
+  name: 05 Несуществующий заказ → 404
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/99999999
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: support
+}
+
+tests {
+  test("код 404", function () {
+    expect(res.status).to.equal(404);
+  });
+}

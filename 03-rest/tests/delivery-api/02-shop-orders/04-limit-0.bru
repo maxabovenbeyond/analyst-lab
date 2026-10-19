@@ -1,0 +1,21 @@
+meta {
+  name: 04 Граница limit=0 → 400
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?limit=0
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 400", function () {
+    expect(res.status).to.equal(400);
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: 08 Неизвестный статус → 400
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?status=FOO
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 400", function () {
+    expect(res.status).to.equal(400);
+  });
+}

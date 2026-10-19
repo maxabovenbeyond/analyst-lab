@@ -1,0 +1,32 @@
+meta {
+  name: 01 Поддельная подпись → 401
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/v1/webhooks/payments
+  body: json
+  auth: none
+}
+
+headers {
+  X-Signature: 0000000000000000000000000000000000000000000000000000000000000000
+}
+
+body:json {
+  {
+    "event_id": "evt_bruno",
+    "type": "payment.succeeded",
+    "provider_payment_id": "PAY-BRUNO",
+    "order_id": 1,
+    "amount": 100.0,
+    "occurred_at": "2026-10-16T10:00:00Z"
+  }
+}
+
+tests {
+  test("код 401", function () {
+    expect(res.status).to.equal(401);
+  });
+}

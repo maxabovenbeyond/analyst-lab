@@ -1,0 +1,21 @@
+meta {
+  name: 09 Испорченный курсор → 400
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?cursor=garbage
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 400", function () {
+    expect(res.status).to.equal(400);
+  });
+}

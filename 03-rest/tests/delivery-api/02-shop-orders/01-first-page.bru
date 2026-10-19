@@ -1,0 +1,43 @@
+meta {
+  name: 01 Первая страница → 200 + курсор
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?limit=3
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+script:post-response {
+  // запоминаем курсор и id заказов для следующего запроса
+  bru.setVar("cursor", res.body.next_cursor);
+  bru.setVar("page1Ids", JSON.stringify(res.body.items.map(function (o) { return o.id; })));
+}
+
+tests {
+  test("код 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("ровно 3 заказа (limit=3)", function () {
+    expect(res.body.items).to.have.lengthOf(3);
+  });
+  test("есть курсор следующей страницы", function () {
+    expect(res.body.next_cursor).to.be.a("string");
+  });
+  test("все заказы этого магазина", function () {
+    var shopId = Number(bru.getEnvVar("shopId"));
+    res.body.items.forEach(function (o) { expect(o.shop_id).to.equal(shopId); });
+  });
+  test("сортировка: сначала новые", function () {
+    var dates = res.body.items.map(function (o) { return o.created_at; });
+    for (var i = 1; i < dates.length; i++) {
+      expect(new Date(dates[i - 1]) >= new Date(dates[i])).to.equal(true);
+    }
+  });
+}

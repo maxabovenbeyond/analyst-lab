@@ -1,0 +1,27 @@
+meta {
+  name: 11 Дата из будущего → 200 и пустой список
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?created_from=2030-01-01T00:00:00Z
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 200, а не 404: список существует, просто пуст", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("заказов нет", function () {
+    expect(res.body.items).to.have.lengthOf(0);
+  });
+  test("курсора нет: это последняя (и единственная) страница", function () {
+    expect(res.body.next_cursor).to.be.null;
+  });
+}

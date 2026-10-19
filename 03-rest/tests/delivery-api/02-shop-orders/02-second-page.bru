@@ -1,0 +1,25 @@
+meta {
+  name: 02 Вторая страница по курсору → без повторов
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?limit=3&cursor={{cursor}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("заказы не повторяют первую страницу", function () {
+    var page1 = JSON.parse(bru.getVar("page1Ids"));
+    res.body.items.forEach(function (o) { expect(page1).to.not.include(o.id); });
+  });
+}

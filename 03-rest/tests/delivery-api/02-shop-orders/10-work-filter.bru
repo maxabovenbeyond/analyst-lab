@@ -1,0 +1,32 @@
+meta {
+  name: 10 Фильтр по статусу → только CANCELLED
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/v1/shops/{{shopId}}/orders?status=CANCELLED&limit=10
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: shop-{{shopId}}
+}
+
+tests {
+  test("код 200", function () {
+    expect(res.status).to.equal(200);
+  });
+  test("список не пустой (иначе проверка статусов пройдёт впустую)", function () {
+    expect(res.body.items).to.not.be.empty;
+  });
+  test("не больше 10 заказов (limit=10)", function () {
+    expect(res.body.items.length).to.be.at.most(10);
+  });
+  test("у каждого заказа статус CANCELLED", function () {
+    res.body.items.forEach(function (o) {
+      expect(o.status).to.equal("CANCELLED");
+    });
+  });
+}
