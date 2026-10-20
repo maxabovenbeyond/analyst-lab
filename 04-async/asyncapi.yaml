@@ -1,0 +1,144 @@
+asyncapi: 3.0.0
+info:
+  title: События сервиса заказов
+  version: 1.0.0
+  description: |
+    Доменные события сервиса заказов.
+    Гарантия доставки at-least-once: потребители обязаны быть идемпотентными по event_id
+    и игнорировать незнакомые поля (tolerant reader).
+
+servers:
+  lab:
+    host: localhost:9092
+    protocol: kafka
+    description: Лабораторный стенд
+
+channels:
+  orderEvents:
+    address: order-events
+    description: Все события заказа. Ключ — order_id, порядок гарантирован в пределах заказа.
+    messages:
+      OrderPaid:
+        $ref: '#/components/messages/OrderPaid'
+      OrderCancelled:
+        $ref: '#/components/messages/OrderCancelled'
+
+operations:
+  publishOrderEvents:
+    action: send
+    summary: Сервис заказов публикует события заказа
+    channel:
+      $ref: '#/channels/orderEvents'
+    messages:
+      - $ref: '#/channels/orderEvents/messages/OrderPaid'
+      - $ref: '#/channels/orderEvents/messages/OrderCancelled'
+
+components:
+  messages:
+    OrderPaid:
+      name: OrderPaid
+      title: Заказ оплачен
+      summary: Публикуется при переходе AWAITING_PAYMENT → PAID
+      contentType: application/json
+      bindings:
+        kafka:
+          key:
+            type: string
+            description: order_id
+      payload:
+        $ref: '#/components/schemas/OrderPaidEvent'
+
+    OrderCancelled:
+      name: OrderCancelled
+      title: Заказ отменен
+      summary: Публикуется при переходе любой → CANCELLED
+      contentType: application/json
+      bindings:
+        kafka:
+          key:
+            type: string
+            description: order_id
+      payload:
+        $ref: '#/components/schemas/OrderCancelledEvent'
+
+  schemas:
+    EventEnvelope:
+      type: object
+      required: [event_id, event_type, event_version, occurred_at, producer, payload]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: Уникальный id события; по нему потребитель распознаёт повтор
+        event_type:
+          type: string
+        event_version:
+          type: integer
+          minimum: 1
+        occurred_at:
+          type: string
+          format: date-time
+          description: Когда произошло событие (UTC)
+        producer:
+          type: string
+          example: order-service
+        correlation_id:
+          type: string
+          description: Сквозной id цепочки для поиска в логах
+
+    OrderPaidEvent:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            event_type:
+              const: OrderPaid
+            payload:
+              type: object
+              required: [order_id, shop_id, customer_id, amount, paid_at]
+              properties:
+                order_id:
+                  type: integer
+                shop_id:
+                  type: integer
+                customer_id:
+                  type: integer
+                amount:
+                  type: number
+                paid_at:
+                  type: string
+                  format: date-time
+
+    OrderCancelledEvent:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          properties:
+            event_type:
+              const: OrderCancelled
+            payload:
+              type: object
+              required: [order_id, shop_id, customer_id, previous_status, cancelled_by, reason, paid_amount, cancelled_at]
+              properties:
+                order_id:
+                  type: integer
+                shop_id:
+                  type: integer
+                customer_id:
+                  type: integer
+                previous_status:
+                  type: string
+                  enum: [AWAITING_PAYMENT, PAID, ASSEMBLING, AWAITING_COURIER]
+                  description: Из какого статуса отменён заказ
+                cancelled_by:
+                  type: string
+                  enum: [CUSTOMER, SHOP, SUPPORT, SYSTEM]
+                reason:
+                  type: string
+                paid_amount:
+                  type: number
+                  minimum: 0
+                  description: Оплаченная сумма; 0 — заказ не был оплачен, возврат не нужен
+                cancelled_at:
+                  type: string
+                  format: date-time
