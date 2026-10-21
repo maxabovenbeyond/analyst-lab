@@ -89,5 +89,17 @@ services:
       - postgres
       - kafka
 
+  notifier:
+    build: ./04-async/notifier
+    container_name: lab-notifier
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://lab:lab@postgres:5432/lab
+      KAFKA_BOOTSTRAP: kafka:29092
+      FAIL_FIRST_ATTEMPTS: "0"
+    depends_on:
+      - postgres
+      - kafka
+
 volumes:
   pgdata:

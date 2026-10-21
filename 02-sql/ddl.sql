@@ -176,3 +176,26 @@ CREATE TABLE delivery.outbox (
 
 -- Частичный индекс: только по неотправленным. Relay ищет именно их.
 CREATE INDEX idx_outbox_unpublished ON delivery.outbox (id) WHERE published_at IS NULL;
+
+-- =====================================================================
+-- Сервис уведомлений: своя схема (в реальности — своя база)
+-- =====================================================================
+DROP SCHEMA IF EXISTS notify CASCADE;
+CREATE SCHEMA notify;
+
+-- Журнал входящих (inbox): какие события уже обработаны
+CREATE TABLE notify.processed_event (
+    event_id      text        PRIMARY KEY,
+    event_type    text        NOT NULL,
+    processed_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Отправленные уведомления
+CREATE TABLE notify.notification (
+    id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    event_id    text        NOT NULL REFERENCES notify.processed_event (event_id),
+    channel     text        NOT NULL CHECK (channel IN ('SMS', 'PUSH')),
+    recipient   text        NOT NULL,
+    text        text        NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
