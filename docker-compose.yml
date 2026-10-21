@@ -78,5 +78,16 @@ services:
     depends_on:
       - kafka
 
+  relay:
+    build: ./04-async/relay
+    container_name: lab-relay
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://lab:lab@postgres:5432/lab
+      KAFKA_BOOTSTRAP: kafka:29092
+    depends_on:
+      - postgres
+      - kafka
+
 volumes:
   pgdata:

@@ -14,9 +14,9 @@ from pydantic import ValidationError
 import base64
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
-
+import uuid
 import psycopg
 from psycopg.rows import dict_row
 from fastapi import APIRouter, FastAPI, Header, Query, Request
@@ -173,6 +173,27 @@ def order_out(order: dict, items=None) -> dict:
         data["items"] = items
     return jsonable_encoder(data)   # numeric → число, timestamptz → строка ISO 8601
 
+# =====================================================================
+# TRANSACTIONAL OUTBOX
+# =====================================================================
+
+def add_event(conn, event_type: str, order_id: int, payload: dict) -> None:
+    """Кладёт событие в лоток outbox В ТОЙ ЖЕ транзакции, что и изменение заказа.
+    Публикацией в Kafka занимается отдельный процесс relay."""
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "event_type": event_type,
+        "event_version": 1,
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "producer": "order-service",
+        "correlation_id": f"order-{order_id}",
+        "payload": jsonable_encoder(payload),
+    }
+    conn.execute(
+        """INSERT INTO delivery.outbox (event_id, aggregate_id, event_type, event)
+           VALUES (%s, %s, %s, %s)""",
+        (event["event_id"], str(order_id), event_type, Jsonb(event)),
+    )
 
 # =====================================================================
 # 4. ЭНДПОИНТЫ
@@ -296,6 +317,22 @@ def cancel_order(order_id: int, body: CancelRequest,       # нет reason → 4
                VALUES (%s, 'CANCELLED', now(), %s)""",
             (order_id, user["role"]),
         )
+                # Событие OrderCancelled по формату из 04-async/events.md
+        paid = conn.execute(
+            """SELECT COALESCE(SUM(amount), 0) AS paid FROM delivery.payment
+               WHERE order_id = %s AND type = 'PAYMENT' AND status = 'SUCCEEDED'""",
+            (order_id,),
+        ).fetchone()["paid"]
+        add_event(conn, "OrderCancelled", order_id, {
+            "order_id": order_id,
+            "shop_id": order["shop_id"],
+            "customer_id": order["customer_id"],
+            "previous_status": order["status"],     # статус ДО отмены: строка загружена до UPDATE
+            "cancelled_by": user["role"],
+            "reason": body.reason,
+            "paid_amount": paid,
+            "cancelled_at": datetime.now(timezone.utc),
+        })
         # TODO шаг 4: если заказ был оплачен — инициировать возврат через провайдера
         order = load_order(conn, order_id)
         return order_out(order, load_items(conn, order_id))  # → 200, COMMIT
@@ -376,6 +413,13 @@ def process_payment_event(conn, e: PaymentEvent) -> str:
                VALUES (%s, 'PAID', now(), 'PAYMENT_PROVIDER')""",
             (e.order_id,),
         )
+        add_event(conn, "OrderPaid", e.order_id, {
+            "order_id": e.order_id,
+            "shop_id": order["shop_id"],
+            "customer_id": order["customer_id"],
+            "amount": money(e.amount),
+            "paid_at": e.occurred_at,
+        })
         return "ORDER_PAID"
 
     if order["status"] == "CANCELLED":

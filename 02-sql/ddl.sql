@@ -162,3 +162,17 @@ CREATE TABLE delivery.webhook_event (
     result       text        NOT NULL,
     received_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- Transactional Outbox: события, ожидающие публикации в Kafka
+CREATE TABLE delivery.outbox (
+    id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    event_id      uuid        NOT NULL UNIQUE,
+    aggregate_id  text        NOT NULL,   -- ключ сообщения в Kafka (order_id)
+    event_type    text        NOT NULL,
+    event         jsonb       NOT NULL,   -- событие целиком: конверт + payload
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    published_at  timestamptz             -- NULL = ещё не отправлено
+);
+
+-- Частичный индекс: только по неотправленным. Relay ищет именно их.
+CREATE INDEX idx_outbox_unpublished ON delivery.outbox (id) WHERE published_at IS NULL;
