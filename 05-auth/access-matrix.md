@@ -9,8 +9,8 @@
 | POST /orders | ✅ | ❌ | ❌ | — | — |
 | GET /orders/{id} | ✅ свои | ✅ свои | ✅ | - | client: customer_id = sub; shop: shop_id из токена; чужой → 404 |
 | GET /me/orders | ✅ | ❌ | ❌ | — | Только заказы sub |
-| POST /orders/{id}/cancel | ✅ свои | ✅ свои | ✅ | — | client: customer_id = sub; shop: shop_id из токена; чужой → 404 |
-| GET /shops/{id}/orders | ✅ свои | ✅ свои | ✅ | — | client: customer_id = sub; shop: shop_id из токена; чужой → 404 |
+| POST /orders/{id}/cancel | ✅ свои | ❌ (отказ — через decline) | ✅ | — | client: customer_id = sub, чужой → 404; support — любые. Статус проверяется отдельно (409) |
+| GET /shops/{id}/orders | ❌ | ✅ свои | ✅ | — | shop: shop_id из токена = {id} в пути, иначе 403 (магазин не секрет) |
 | POST /orders/{id}/accept | ❌ | ✅ свои | ✅ | — | shop: shop_id из токена; чужой → 404 |
 | POST /claims/{id}/approve | ❌ | ❌ | ✅ | — | - |
 | POST /webhooks/payments | — | — | — | — | Не OAuth: подпись HMAC |

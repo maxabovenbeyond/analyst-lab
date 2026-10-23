@@ -1,5 +1,5 @@
 @startuml seq-auth-code-pkce
-title OAuth 2.0 Authorization Code with PKCE: пользователь авторизуется и вызывает API заказов
+title OAuth 2.0 Authorization Code + PKCE: вход пользователя и вызов API
 autonumber
 
 actor "Анна" as U
@@ -8,29 +8,42 @@ participant "Браузер" as BR
 participant "Keycloak" as KC
 participant "Order API" as API
 
-== Авторизация ==
-U -> BR: Открыть web-app
-BR -> APP: Загрузить приложение и нажать «Войти»
-APP -> KC: Генерировать code_verifier и code_challenge
-U -> KC: ввод пароля
-KC -> KC: Генерировать authorization code
-KC --> APP: Redirect с code
-APP -> APP: обмен кода + verifier на токены и проверка отпечатка
+== Вход ==
+U -> APP: Нажать «Войти»
+APP -> APP: Сгенерировать verifier (секрет)\nи challenge = SHA256(verifier)
+APP -> BR: Redirect на Keycloak /auth\nclient_id, redirect_uri, state, challenge
+BR -> KC: GET /auth?...&code_challenge=...
+KC --> BR: Страница входа Keycloak
+U -> BR: Ввести логин и пароль
+BR -> KC: POST логин и пароль
+note right of KC
+  Пароль видит только Keycloak.
+  Приложение в этой цепочке не участвует.
+end note
+KC -> KC: Проверить пароль,\nзапомнить challenge,\nсоздать одноразовый code
+KC --> BR: Redirect на redirect_uri?code=...&state=...
+BR -> APP: GET /callback?code=...&state=...
+APP -> APP: Проверить state
+note right of BR
+  Код прошёл через браузер и мог быть перехвачен.
+  Без verifier он бесполезен.
+end note
+
+== Обмен кода на токены ==
+APP -> KC: POST /token\ngrant_type=authorization_code\ncode + verifier
+KC -> KC: SHA256(verifier) == challenge?
+alt отпечаток совпал
+  KC --> APP: access_token, refresh_token, id_token
+else не совпал (код перехвачен)
+  KC --> APP: 400 invalid_grant\nPKCE verification failed
+end
 
 == Вызов API ==
 APP -> API: GET /v1/orders/8001\nAuthorization: Bearer <access_token>
-API -> API: Проверить подпись (открытый ключ Keycloak),\nexp, iss, aud, роль
-alt токен действителен и роль разрешена
-  API --> APP: 200 OK
-else подпись / exp / aud не прошли
-  API --> APP: 401
-else роль не разрешена
-  API --> APP: 403
-end
+API -> API: Проверить подпись, exp, iss, aud, роль,\nпринадлежность заказа (customer_id = sub)
+API --> APP: 200 / 401 / 403 / 404
 
-note over API
-  API не обращается к Keycloak на каждый запрос:
-  открытый ключ для проверки подписи
-  загружается один раз и кэшируется
-end note
+== Обновление токена (через 5 мин) ==
+APP -> KC: POST /token\ngrant_type=refresh_token
+KC --> APP: новый access_token
 @enduml
