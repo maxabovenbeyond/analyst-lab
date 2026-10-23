@@ -1,0 +1,36 @@
+@startuml seq-auth-code-pkce
+title OAuth 2.0 Authorization Code with PKCE: пользователь авторизуется и вызывает API заказов
+autonumber
+
+actor "Анна" as U
+participant "web-app\n(приложение)" as APP
+participant "Браузер" as BR
+participant "Keycloak" as KC
+participant "Order API" as API
+
+== Авторизация ==
+U -> BR: Открыть web-app
+BR -> APP: Загрузить приложение и нажать «Войти»
+APP -> KC: Генерировать code_verifier и code_challenge
+U -> KC: ввод пароля
+KC -> KC: Генерировать authorization code
+KC --> APP: Redirect с code
+APP -> APP: обмен кода + verifier на токены и проверка отпечатка
+
+== Вызов API ==
+APP -> API: GET /v1/orders/8001\nAuthorization: Bearer <access_token>
+API -> API: Проверить подпись (открытый ключ Keycloak),\nexp, iss, aud, роль
+alt токен действителен и роль разрешена
+  API --> APP: 200 OK
+else подпись / exp / aud не прошли
+  API --> APP: 401
+else роль не разрешена
+  API --> APP: 403
+end
+
+note over API
+  API не обращается к Keycloak на каждый запрос:
+  открытый ключ для проверки подписи
+  загружается один раз и кэшируется
+end note
+@enduml
