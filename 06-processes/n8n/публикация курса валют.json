@@ -1,0 +1,204 @@
+{
+  "name": "публикация курса валют",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "79bc9c01-e617-49fb-9186-7b40628d24be",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.cbr-xml-daily.ru/daily_json.js",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "d2cba9c8-dec1-447d-b3b5-8ab0767fcfec",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f4a3bd39-2762-4187-9588-2ca20fef1988",
+              "name": "currency",
+              "value": "USD",
+              "type": "string"
+            },
+            {
+              "id": "7d032a0b-dc20-41cd-95b0-ec93c391c367",
+              "name": "=rate",
+              "value": "={{ $json.Valute.USD.Value }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "f93af938-6818-42db-94cb-76a0477e32a7",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "n8n_lab",
+          "mode": "list",
+          "cachedResultName": "n8n_lab"
+        },
+        "table": {
+          "__rl": true,
+          "value": "rates",
+          "mode": "list",
+          "cachedResultName": "rates"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "currency": "={{ $json.currency }}",
+            "rate": "={{ $json.rate }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rate",
+              "displayName": "rate",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "loaded_at",
+              "displayName": "loaded_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        0
+      ],
+      "id": "bdabcf1b-b329-44d8-bd2e-2b02b7c9562d",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "lZAVMfJl2Dh2MHQx",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ba0ccd2c-fbf4-499d-94b6-88860d189c0b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "261ca75075f0d47fa0df338e222bff7b02a45a1124322a421b521fc992209624"
+  },
+  "nodeGroups": [],
+  "id": "ALsv2EpbYceztqLV",
+  "tags": []
+}

@@ -1,0 +1,121 @@
+{
+  "name": "бот с заказами от 3000",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "big-order",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3f119290-0001-4a6b-b3a4-a65dd787e5a2",
+      "name": "Webhook",
+      "webhookId": "8cfa0749-d281-4531-9c72-ce78a1a37310",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "J40WCjO8IcOi7Q2M",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "1172207d-3a8e-4bed-af00-21e56903c900",
+              "leftValue": "={{ $json.body.amount }}",
+              "rightValue": 3000,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "d92b7869-a6e2-44c6-be16-dba0d8852085",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "495909784",
+        "text": "=Крупный заказ №{{ $json.body.order_id }} на {{ $json.body.amount }} ₽",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        416,
+        -16
+      ],
+      "id": "8dd9a622-5f00-4ec4-abcc-25fecb498107",
+      "name": "Send a text message",
+      "webhookId": "2336ae2b-0c9e-4f7c-a612-d75d89078be8",
+      "credentials": {
+        "telegramApi": {
+          "id": "w1SLsSoTwHKkERlo",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4c8649c4-53f2-4143-8e1d-81599ccaff82",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "261ca75075f0d47fa0df338e222bff7b02a45a1124322a421b521fc992209624"
+  },
+  "nodeGroups": [],
+  "id": "spH9NpTCE3yOBeza",
+  "tags": []
+}
