@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_0g2szgx" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.51.1" modeler:executionPlatform="Camunda Cloud" modeler:executionPlatformVersion="8.9.0">
+  <bpmn:process id="Process_1k5c7iv" isExecutable="true">
+    <bpmn:startEvent id="Start" name="Заказ создан">
+      <bpmn:outgoing>F1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:eventBasedGateway id="WaitGateway" name="Что случится раньше?">
+      <bpmn:incoming>F1</bpmn:incoming>
+      <bpmn:outgoing>F2</bpmn:outgoing>
+      <bpmn:outgoing>F3</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="PaymentReceived" name="Оплата получена">
+      <bpmn:incoming>F2</bpmn:incoming>
+      <bpmn:outgoing>F4</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="PaymentReceived_def" messageRef="Msg_PaymentReceived" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="PaymentTimeout" name="Прошло 15 минут">
+      <bpmn:incoming>F3</bpmn:incoming>
+      <bpmn:outgoing>F5</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="PaymentTimeout_def">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT15M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="NotifyShop" name="Передать заказ магазину">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="notify-shop" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F4</bpmn:incoming>
+      <bpmn:outgoing>F6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="CancelOrder" name="Отменить заказ: «Не оплачен»">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cancel-order" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F5</bpmn:incoming>
+      <bpmn:outgoing>F7</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndPaid" name="Заказ оплачен">
+      <bpmn:incoming>F6</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndCancelled" name="Заказ отменён">
+      <bpmn:incoming>F7</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="WaitGateway" />
+    <bpmn:sequenceFlow id="F2" sourceRef="WaitGateway" targetRef="PaymentReceived" />
+    <bpmn:sequenceFlow id="F3" sourceRef="WaitGateway" targetRef="PaymentTimeout" />
+    <bpmn:sequenceFlow id="F4" sourceRef="PaymentReceived" targetRef="NotifyShop" />
+    <bpmn:sequenceFlow id="F5" sourceRef="PaymentTimeout" targetRef="CancelOrder" />
+    <bpmn:sequenceFlow id="F6" sourceRef="NotifyShop" targetRef="EndPaid" />
+    <bpmn:sequenceFlow id="F7" sourceRef="CancelOrder" targetRef="EndCancelled" />
+    <bpmn:startEvent id="Event_19akb8h" name="Заказ оплачен">
+      <bpmn:outgoing>Flow_0x2hb7t</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="AcceptOrder" name="Принять заказ">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="shop" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0x2hb7t</bpmn:incoming>
+      <bpmn:outgoing>Flow_1a62azp</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="SmsOwner" name="SMS владельцу: заказ не принят (US-01)">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="sms-shop-owner" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0gzrb42</bpmn:incoming>
+      <bpmn:outgoing>Flow_13u4nnt</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Activity_0j7jjxg" name="Отменить заказ: «Магазин не подтвердил»">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cancel-order" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_0odqil1</bpmn:incoming>
+      <bpmn:outgoing>Flow_0yezi8x</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndAccepted" name="Заказ принят">
+      <bpmn:incoming>Flow_1a62azp</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndReminded" name="Владелец уведомлён">
+      <bpmn:incoming>Flow_13u4nnt</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="Event_0kycjqb" name="Заказ отменён">
+      <bpmn:incoming>Flow_0yezi8x</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Timeout10" name="10 минут" attachedToRef="AcceptOrder">
+      <bpmn:outgoing>Flow_0odqil1</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timeout10_def">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT10M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Remind7" name="7 минут" cancelActivity="false" attachedToRef="AcceptOrder">
+      <bpmn:outgoing>Flow_0gzrb42</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Remind7_def">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT7M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_0x2hb7t" sourceRef="Event_19akb8h" targetRef="AcceptOrder" />
+    <bpmn:sequenceFlow id="Flow_1a62azp" sourceRef="AcceptOrder" targetRef="EndAccepted" />
+    <bpmn:sequenceFlow id="Flow_0gzrb42" sourceRef="Remind7" targetRef="SmsOwner" />
+    <bpmn:sequenceFlow id="Flow_13u4nnt" sourceRef="SmsOwner" targetRef="EndReminded" />
+    <bpmn:sequenceFlow id="Flow_0odqil1" sourceRef="Timeout10" targetRef="Activity_0j7jjxg" />
+    <bpmn:sequenceFlow id="Flow_0yezi8x" sourceRef="Activity_0j7jjxg" targetRef="Event_0kycjqb" />
+    <bpmn:startEvent id="Event_11yigzb" name="Заказ собран">
+      <bpmn:outgoing>Flow_1dzg5s9</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="CallMain" name="Вызвать курьера (MAIN)">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="call-courier" retries="3" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;MAIN&#34;" target="provider" />
+          <zeebe:input source="=order_id" target="order_id" />
+          <zeebe:output source="=courier_id" target="courier_id" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1dzg5s9</bpmn:incoming>
+      <bpmn:outgoing>Flow_0eoxrhv</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="CallBackup" name="Вызвать курьера (BACKUP)">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="call-courier" retries="3" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;BACKUP&#34;" target="provider" />
+          <zeebe:input source="=order_id" target="order_id" />
+          <zeebe:output source="=courier_id" target="courier_id" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1hln8oe</bpmn:incoming>
+      <bpmn:outgoing>Flow_1ymt00c</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Join" name="">
+      <bpmn:incoming>Flow_0eoxrhv</bpmn:incoming>
+      <bpmn:incoming>Flow_1ymt00c</bpmn:incoming>
+      <bpmn:outgoing>Flow_0vhbc5u</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Activity_1532ac0" name="Отменить заказ: «Курьер не найден» (запуск компенсаций)">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cancel-order" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_19o07cw</bpmn:incoming>
+      <bpmn:outgoing>Flow_1uft7ch</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndAssigned" name="Курьер назначен">
+      <bpmn:incoming>Flow_0vhbc5u</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="Event_13a4v9q" name="Заказ отменён">
+      <bpmn:incoming>Flow_1uft7ch</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="NotFoundMain" name="Курьер не найден" attachedToRef="CallMain">
+      <bpmn:outgoing>Flow_1hln8oe</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="NotFoundMain_def" errorRef="Err_CourierNotFound" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="NotFoundBackup" name="Курьер не найден" attachedToRef="CallBackup">
+      <bpmn:outgoing>Flow_19o07cw</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="NotFoundBackup_def" errorRef="Error_171rivc" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_1dzg5s9" sourceRef="Event_11yigzb" targetRef="CallMain" />
+    <bpmn:sequenceFlow id="Flow_0eoxrhv" sourceRef="CallMain" targetRef="Join" />
+    <bpmn:sequenceFlow id="Flow_1hln8oe" sourceRef="NotFoundMain" targetRef="CallBackup" />
+    <bpmn:sequenceFlow id="Flow_1ymt00c" sourceRef="CallBackup" targetRef="Join" />
+    <bpmn:sequenceFlow id="Flow_0vhbc5u" sourceRef="Join" targetRef="EndAssigned" />
+    <bpmn:sequenceFlow id="Flow_19o07cw" sourceRef="NotFoundBackup" targetRef="Activity_1532ac0" />
+    <bpmn:sequenceFlow id="Flow_1uft7ch" sourceRef="Activity_1532ac0" targetRef="Event_13a4v9q" />
+  </bpmn:process>
+  <bpmn:message id="Msg_PaymentReceived" name="PaymentReceived">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=order_id" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:error id="Err_CourierNotFound" name="Курьер не найден" errorCode="COURIER_NOT_FOUND" />
+  <bpmn:error id="Error_171rivc" name="Курьер не найден" errorCode="COURIER_NOT_FOUND" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1k5c7iv">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start">
+        <dc:Bounds x="192" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="177" y="218" width="67" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WaitGateway_di" bpmnElement="WaitGateway">
+        <dc:Bounds x="285" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="276" y="225" width="69" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentReceived_di" bpmnElement="PaymentReceived">
+        <dc:Bounds x="412" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="386" y="138" width="89" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="PaymentTimeout_di" bpmnElement="PaymentTimeout">
+        <dc:Bounds x="412" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="386" y="298" width="89" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotifyShop_di" bpmnElement="NotifyShop">
+        <dc:Bounds x="520" y="80" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CancelOrder_di" bpmnElement="CancelOrder">
+        <dc:Bounds x="520" y="240" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndPaid_di" bpmnElement="EndPaid">
+        <dc:Bounds x="722" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="703" y="138" width="74" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndCancelled_di" bpmnElement="EndCancelled">
+        <dc:Bounds x="722" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="702" y="298" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0ywtsfd" bpmnElement="Event_19akb8h">
+        <dc:Bounds x="192" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="173" y="578" width="74" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="AcceptOrder_di" bpmnElement="AcceptOrder">
+        <dc:Bounds x="290" y="520" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SmsOwner_di" bpmnElement="SmsOwner">
+        <dc:Bounds x="261" y="780" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1pxtipq" bpmnElement="Activity_0j7jjxg">
+        <dc:Bounds x="470" y="680" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndAccepted_di" bpmnElement="EndAccepted">
+        <dc:Bounds x="492" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="476" y="578" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndReminded_di" bpmnElement="EndReminded">
+        <dc:Bounds x="442" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="432" y="838" width="57" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_053jowg" bpmnElement="Event_0kycjqb">
+        <dc:Bounds x="652" y="702" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="632" y="738" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_042ipvi" bpmnElement="Event_11yigzb">
+        <dc:Bounds x="172" y="1022" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="156" y="1058" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CallMain_di" bpmnElement="CallMain">
+        <dc:Bounds x="270" y="1000" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CallBackup_di" bpmnElement="CallBackup">
+        <dc:Bounds x="270" y="1160" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_di" bpmnElement="Join" isMarkerVisible="true">
+        <dc:Bounds x="520" y="1015" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0tdlxzr" bpmnElement="Activity_1532ac0">
+        <dc:Bounds x="270" y="1320" width="130" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndAssigned_di" bpmnElement="EndAssigned">
+        <dc:Bounds x="622" y="1022" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="597" y="1058" width="87" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1w8mnqe" bpmnElement="Event_13a4v9q">
+        <dc:Bounds x="472" y="1342" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="452" y="1378" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timeout10_di" bpmnElement="Timeout10">
+        <dc:Bounds x="370" y="582" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="365" y="618" width="47" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Remind7_di" bpmnElement="Remind7">
+        <dc:Bounds x="308" y="582" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="306" y="618" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotFoundMain_di" bpmnElement="NotFoundMain">
+        <dc:Bounds x="317" y="1062" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="309" y="1098" width="52" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NotFoundBackup_di" bpmnElement="NotFoundBackup">
+        <dc:Bounds x="317" y="1222" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="309" y="1258" width="52" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1">
+        <di:waypoint x="228" y="200" />
+        <di:waypoint x="285" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_di" bpmnElement="F2">
+        <di:waypoint x="310" y="175" />
+        <di:waypoint x="310" y="120" />
+        <di:waypoint x="412" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_di" bpmnElement="F3">
+        <di:waypoint x="310" y="225" />
+        <di:waypoint x="310" y="280" />
+        <di:waypoint x="412" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F4_di" bpmnElement="F4">
+        <di:waypoint x="448" y="120" />
+        <di:waypoint x="520" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F5_di" bpmnElement="F5">
+        <di:waypoint x="448" y="280" />
+        <di:waypoint x="520" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F6_di" bpmnElement="F6">
+        <di:waypoint x="650" y="120" />
+        <di:waypoint x="722" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F7_di" bpmnElement="F7">
+        <di:waypoint x="650" y="280" />
+        <di:waypoint x="722" y="280" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_0xa4cvg" bpmnElement="Flow_0x2hb7t">
+        <di:waypoint x="228" y="560" />
+        <di:waypoint x="290" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1tx7qw4" bpmnElement="Flow_1a62azp">
+        <di:waypoint x="420" y="560" />
+        <di:waypoint x="492" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_0ig4v2u" bpmnElement="Flow_0gzrb42">
+        <di:waypoint x="326" y="618" />
+        <di:waypoint x="326" y="780" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1ryl62q" bpmnElement="Flow_13u4nnt">
+        <di:waypoint x="391" y="820" />
+        <di:waypoint x="442" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_0b718r7" bpmnElement="Flow_0odqil1">
+        <di:waypoint x="388" y="618" />
+        <di:waypoint x="388" y="720" />
+        <di:waypoint x="470" y="720" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1dyzfrf" bpmnElement="Flow_0yezi8x">
+        <di:waypoint x="600" y="720" />
+        <di:waypoint x="652" y="720" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_0u2clsj" bpmnElement="Flow_1dzg5s9">
+        <di:waypoint x="208" y="1040" />
+        <di:waypoint x="270" y="1040" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1irb5c7" bpmnElement="Flow_0eoxrhv">
+        <di:waypoint x="400" y="1040" />
+        <di:waypoint x="520" y="1040" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1dl00jz" bpmnElement="Flow_1hln8oe">
+        <di:waypoint x="335" y="1098" />
+        <di:waypoint x="335" y="1160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1o0aexn" bpmnElement="Flow_1ymt00c">
+        <di:waypoint x="400" y="1200" />
+        <di:waypoint x="545" y="1200" />
+        <di:waypoint x="545" y="1065" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_03vs6yc" bpmnElement="Flow_0vhbc5u">
+        <di:waypoint x="570" y="1040" />
+        <di:waypoint x="622" y="1040" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1fxiwl0" bpmnElement="Flow_19o07cw">
+        <di:waypoint x="335" y="1258" />
+        <di:waypoint x="335" y="1320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_18xl1cl" bpmnElement="Flow_1uft7ch">
+        <di:waypoint x="400" y="1360" />
+        <di:waypoint x="472" y="1360" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
