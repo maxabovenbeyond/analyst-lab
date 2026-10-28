@@ -1,0 +1,63 @@
+@startuml seq-create-task
+title Создание задачи из сообщения (US-01) и подтверждение (US-02)
+autonumber
+
+actor "Ассистент" as A
+participant "Telegram" as TG
+participant "Бот-сервис" as BOT
+participant "Ollama" as LLM
+database "Postgres" as DB
+
+== US-01. Распознавание ==
+A -> TG: «в сентябре проследить за садовниками»
+BOT -> TG: Запрос новых сообщений (polling)
+TG --> BOT: Сообщение + Telegram ID
+
+BOT -> DB: Пользователь в списке разрешённых?
+alt Не разрешён (US-09)
+  BOT -> TG: «Доступ закрыт»
+  TG -> A: «Доступ закрыт»
+else Разрешён
+  BOT -> LLM: Промпт + текст + сегодняшняя дата + пояс Europe/Paris
+  alt Ответ получен вовремя и соответствует JSON-схеме
+    LLM --> BOT: {title, date, time}
+    BOT -> BOT: Проверка даты в коде (BR-03, BR-04, BR-06, BR-07)
+    alt Задача найдена, дата распознана
+      BOT -> DB: INSERT task (status = draft, remind_at)
+      BOT -> TG: «Задача … Напомнить: среда, 1 сентября 2027, 10:00 (Париж). Верно?» [Да] [Изменить]
+      TG -> A: Предложение с кнопками
+    else Задача найдена, дата не распознана
+      BOT -> DB: INSERT task (status = draft, remind_at = NULL)
+      BOT -> TG: «Когда напомнить?»
+      TG -> A: Вопрос о дате
+    else Задачи в тексте нет
+      BOT -> TG: Подсказка, как создать задачу
+      TG -> A: Подсказка
+    end
+  else Таймаут или некорректный JSON после повторных попыток (US-08)
+    BOT -> DB: INSERT task (status = draft, parsed_by = manual, remind_at = NULL)
+    BOT -> TG: «Не смог разобрать автоматически. Сохранил текст. Когда напомнить?»
+    TG -> A: Сообщение
+  end
+end
+
+== US-02. Подтверждение или исправление ==
+loop пока ассистент не нажала «Да»
+  alt Нажата «Да»
+    A -> TG: Кнопка «Да»
+    TG -> BOT: callback_query
+    BOT -> DB: UPDATE task SET status = active WHERE id = … AND status = draft
+    BOT -> TG: «Сохранено. Напомню в среду, 1 сентября 2027, 10:00 (Париж)»
+    TG -> A: Подтверждение
+  else Нажата «Изменить»
+    A -> TG: Кнопка «Изменить» → выбирает «Дата» или «Текст»
+    TG -> BOT: callback_query
+    BOT -> TG: «Введите новое значение»
+    A -> TG: Новое значение
+    BOT -> BOT: Проверка новой даты (BR-04, BR-06)
+    BOT -> DB: UPDATE task (draft)
+    BOT -> TG: Задача заново с кнопками [Да] [Изменить]
+  end
+end
+
+@enduml
